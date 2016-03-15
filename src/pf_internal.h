@@ -1,7 +1,11 @@
 #ifndef __PF_INTERNAL_H_INCLUDED__
 #define __PF_INTERNAL_H_INCLUDED__
 
-// TODO write this
+#include <stdint.h>
+
+#define PF_MAX_MSG_ID 65535
+
+// TODO write this to the trace files
 typedef struct version_msg {
     uint64_t magic;
     uint64_t version;
@@ -13,7 +17,6 @@ typedef struct version_msg {
 typedef struct fmt_msg {
     uint16_t msg_id;
     uint16_t fmt_len;
-    char *fmt;
 } fmt_msg_t;
 
 typedef struct trc_msg {
@@ -21,7 +24,6 @@ typedef struct trc_msg {
     uint16_t buf_len;
     uint32_t tid;
     uint64_t timestamp;
-    char *buf;
 } trc_msg_t;
 
 #define FMT_MSG_TYPE 1
@@ -32,6 +34,11 @@ typedef struct queue_msg {
 	fmt_msg_t fmt_msg;
 	trc_msg_t trc_msg;
     };
+    // followed by the message buffer
 } queue_msg_t;
+
+static inline char *qmsg_buffer(queue_msg_t *queue_msg) {
+	return (char*)queue_msg + sizeof(*queue_msg);
+}
 
 #endif

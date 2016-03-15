@@ -17,34 +17,32 @@ typedef struct writer_ctx {
 
 static writer_ctx_t wctx;
 
-void write_fmt_msg(fmt_msg_t *msg)
+void write_fmt_msg(fmt_msg_t *msg, char *fmt_buf)
 {
 	size_t written;
-	size_t write_size = sizeof(*msg) - sizeof(*msg->fmt);
 
-	written = fwrite_unlocked(msg, 1, write_size, wctx.md_file);
-	if (written != write_size) {
+	written = fwrite_unlocked(msg, 1, sizeof(*msg), wctx.md_file);
+	if (written != sizeof(*msg)) {
 		printf("md write failed written=%lu err=%d\n", written, errno);
 		return;
 	}
-	written = fwrite_unlocked(msg->fmt, 1, msg->fmt_len, wctx.md_file);
+	written = fwrite_unlocked(fmt_buf, 1, msg->fmt_len, wctx.md_file);
 	if (written !=  msg->fmt_len) {
 		printf("md write failed  written=%lu err=%d\n", written, errno);
 		return;
 	}
 }
 
-void write_trc_msg(trc_msg_t *msg)
+void write_trc_msg(trc_msg_t *msg, char *msg_buffer)
 {
 	size_t written;
-	size_t write_size = sizeof(*msg) - sizeof(*msg->buf);
 
-	written = fwrite_unlocked(msg, 1, write_size, wctx.trc_file);
-	if (written != write_size) {
+	written = fwrite_unlocked(msg, 1, sizeof(*msg), wctx.trc_file);
+	if (written != sizeof(*msg)) {
 		printf("md write failed written=%lu err=%d\n", written, errno);
 		return;
 	}
-	written = fwrite_unlocked(msg->buf, 1, msg->buf_len, wctx.trc_file);
+	written = fwrite_unlocked(msg_buffer, 1, msg->buf_len, wctx.trc_file);
 	if (written !=  msg->buf_len) {
 		printf("md write failed  written=%lu err=%d\n", written, errno);
 		return;
@@ -56,12 +54,13 @@ void handle_queue_msg(lf_element_t *lfe)
 	queue_msg_t *msg = lfe->data;
 	switch (msg->type) {
 	case FMT_MSG_TYPE:
-		printf("got fmt msg len=%u fmt=%s\n", msg->fmt_msg.fmt_len, msg->fmt_msg.fmt);
-		write_fmt_msg(&msg->fmt_msg);
+		printf("got fmt msg len=%u fmt=%s\n", msg->fmt_msg.fmt_len,
+		       qmsg_buffer(msg));
+		write_fmt_msg(&msg->fmt_msg, qmsg_buffer(msg));
 		break;
 	case TRC_MSG_TYPE:
 		printf("got trc msg len=%u\n", msg->trc_msg.buf_len);
-		write_trc_msg(&msg->trc_msg);
+		write_trc_msg(&msg->trc_msg, qmsg_buffer(msg));
 		break;
 	default:
 		printf("[ERR] unknown msg type %d\n", msg->type);
@@ -83,7 +82,7 @@ void *writer(void *arg)
 	return 0;
 }
 
-int open_files(const char *file_name_prefix)
+int init(const char *file_name_prefix)
 {
 	char file_path[PATH_MAX];
 	char link_path[PATH_MAX];
@@ -107,7 +106,7 @@ int open_files(const char *file_name_prefix)
 	return 0;
 }
 
-void close_files(void)
+void terminate(void)
 {
 	// TODO error handling
 	fclose(wctx.md_file);
@@ -120,7 +119,7 @@ int start_writer(lf_queue_handle_t queue, const char *file_name_prefix)
 	wctx.queue = queue;
 	wctx.stop = false;
 
-	res = open_files(file_name_prefix);
+	res = init(file_name_prefix);
 	if (res != 0) {
 		return res;
 	}
@@ -132,6 +131,6 @@ int stop_writer()
 {
 	wctx.stop = true;
 	pthread_join(wctx.writer_thread, NULL);
-	close_files();
+	terminate();
 	return 0;
 }

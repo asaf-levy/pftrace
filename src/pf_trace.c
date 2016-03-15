@@ -12,13 +12,12 @@
 
 #define TRACE_MSG_SIZE 512
 #define INITIAL_MSG_ID 8
-#define MAX_MSG_ID 65535
 
 typedef struct pf_trace {
     pf_trace_config_t trace_cfg;
     lf_queue_handle_t trace_queue;
     uint16_t current_msg_id;
-    uint16_t *type_info[MAX_MSG_ID];
+    uint16_t *type_info[PF_MAX_MSG_ID];
 } pf_trace_t;
 
 static pf_trace_t trace_ctx;
@@ -42,7 +41,7 @@ int pf_trace_init(pf_trace_config_t *trace_cfg)
 		return err;
 	}
 	trace_ctx.current_msg_id = INITIAL_MSG_ID;
-	for (i = 0; i < MAX_MSG_ID; ++i) {
+	for (i = 0; i < PF_MAX_MSG_ID; ++i) {
 		trace_ctx.type_info[i] = NULL;
 	}
 	trace_ctx.trace_cfg = *trace_cfg;
@@ -59,7 +58,7 @@ int pf_trace_destroy(void)
 	int i;
 
 	stop_writer();
-	for (i = 0; i < MAX_MSG_ID; ++i) {
+	for (i = 0; i < PF_MAX_MSG_ID; ++i) {
 		free(trace_ctx.type_info[i]);
 	}
 	lf_queue_destroy(trace_ctx.trace_queue);
@@ -90,14 +89,12 @@ const char *trc_level_to_str(pf_trc_level_t level)
 	}
 }
 
-void build_fmt_msg(fmt_msg_t *fmt_msg, uint16_t msg_id, const char *file, int line,
-                   const char *func, pf_trc_level_t level, const char *fmt)
+int build_fmt(char *fmt_buffer, uint16_t msg_id, const char *file, int line,
+              const char *func, pf_trc_level_t level, const char *fmt)
 {
-	fmt_msg->msg_id = msg_id;
-	// TODO handle truncation
-	fmt_msg->fmt_len = snprintf(fmt_msg->fmt, TRACE_MSG_SIZE - sizeof(queue_msg_t),
-	                           "%s:%d %s [%s] %s", basename(file), line, func,
-	                            trc_level_to_str(level), fmt);
+	return snprintf(fmt_buffer, TRACE_MSG_SIZE - sizeof(queue_msg_t),
+	                "%s:%d %s [%s] %s", basename(file), line, func,
+	                trc_level_to_str(level), fmt);
 }
 
 int store_fmt_info(uint16_t msg_id, const char *fmt)
@@ -153,24 +150,21 @@ int pf_trace_fmt(uint16_t msg_id, const char *file, int line,
 	q_msg = lfe->data;
 	q_msg->type = FMT_MSG_TYPE;
 	fmt_msg = &q_msg->fmt_msg;
-	fmt_msg->fmt = (char*)q_msg + sizeof(*q_msg);
-	build_fmt_msg(fmt_msg, msg_id, file, line, func, level, fmt);
+	fmt_msg->msg_id = msg_id;
+	// TODO handle truncation
+	fmt_msg->fmt_len = build_fmt(qmsg_buffer(q_msg), msg_id, file, line, func, level, fmt);
 	lf_queue_enqueue(trace_ctx.trace_queue, lfe);
 	return 0;
 }
 
-void store_arg(void *p, size_t sz, trc_msg_t *trc_msg)
+void store_arg(void *p, size_t sz, trc_msg_t *trc_msg, char *msg_buffer)
 {
-
-	if (TRACE_MSG_SIZE - sizeof(queue_msg_t) < sz) {
-		return;
-	} else {
-		memcpy(trc_msg->buf + trc_msg->buf_len, p, sz);
-		trc_msg->buf_len += sz;
-	}
+	// TODO handle buffer overrun
+	memcpy(msg_buffer + trc_msg->buf_len, p, sz);
+	trc_msg->buf_len += sz;
 }
 
-void store_args(uint16_t msg_id, va_list vl, trc_msg_t *trc_msg)
+void store_args(uint16_t msg_id, va_list vl, trc_msg_t *trc_msg, char *msg_buffer)
 {
 	int i;
 	int val_int;
@@ -190,49 +184,49 @@ void store_args(uint16_t msg_id, va_list vl, trc_msg_t *trc_msg)
 		switch (types[i]) {
 		case PA_INT:
 			val_int = va_arg(vl, int);
-			store_arg((void *) &val_int, sizeof(val_int), trc_msg);
+			store_arg((void *) &val_int, sizeof(val_int), trc_msg, msg_buffer);
 			break;
 		case PA_INT | PA_FLAG_LONG:
 			val_l_int = va_arg(vl, long int);
-			store_arg((void *) &val_l_int, sizeof(val_l_int), trc_msg);
+			store_arg((void *) &val_l_int, sizeof(val_l_int), trc_msg, msg_buffer);
 			break;
 		case PA_INT | PA_FLAG_LONG_LONG:
 			val_ll_int = va_arg(vl, long long int);
-			store_arg((void *) &val_ll_int, sizeof(val_ll_int), trc_msg);
+			store_arg((void *) &val_ll_int, sizeof(val_ll_int), trc_msg, msg_buffer);
 			break;
 		case PA_INT | PA_FLAG_SHORT:
 			val_int = va_arg(vl, int);
 			val_s_int = (short int)val_int;
-			store_arg((void *) &val_s_int, sizeof(val_s_int), trc_msg);
+			store_arg((void *) &val_s_int, sizeof(val_s_int), trc_msg, msg_buffer);
 			break;
 		case PA_CHAR:
 			val_int = va_arg(vl, int);
 			val_chr = (char)val_int;
-			store_arg((void *) &val_chr, sizeof(val_chr), trc_msg);
+			store_arg((void *) &val_chr, sizeof(val_chr), trc_msg, msg_buffer);
 			break;
 		case PA_STRING:
 			val_str = va_arg(vl, char *);
 			if (!val_str) {
 				val_str = (char *)"<NULL>";
 			}
-			store_arg((void *)val_str, strnlen(val_str, TRACE_MSG_SIZE + 1), trc_msg);
+			store_arg((void *)val_str, strnlen(val_str, TRACE_MSG_SIZE + 1), trc_msg, msg_buffer);
 			break;
 		case PA_POINTER:
 			val_ptr = va_arg(vl, void *);
-			store_arg(&val_ptr, sizeof(val_ptr), trc_msg);
+			store_arg(&val_ptr, sizeof(val_ptr), trc_msg, msg_buffer);
 			break;
 		case PA_FLOAT:
 			val_dbl = va_arg(vl, double);
 			val_flt = (float) val_dbl;
-			store_arg((void *) &val_flt, sizeof(val_flt), trc_msg);
+			store_arg((void *) &val_flt, sizeof(val_flt), trc_msg, msg_buffer);
 			break;
 		case PA_DOUBLE:
 			val_dbl = va_arg(vl, double);
-			store_arg((void *) &val_dbl, sizeof(val_dbl), trc_msg);
+			store_arg((void *) &val_dbl, sizeof(val_dbl), trc_msg, msg_buffer);
 			break;
 		case PA_DOUBLE | PA_FLAG_LONG_DOUBLE:
 			val_l_dbl = va_arg(vl, long double);
-			store_arg((void *) &val_l_dbl, sizeof(val_l_dbl), trc_msg);
+			store_arg((void *) &val_l_dbl, sizeof(val_l_dbl), trc_msg, msg_buffer);
 			break;
 		case PA_LAST:
 			break;
@@ -266,8 +260,7 @@ void pf_trace(uint16_t msg_id, const char *fmt, ...)
 	trc_msg->msg_id = msg_id;
 	trc_msg->tid = 0; // TODO
 	trc_msg->timestamp = 0; // TODO
-	trc_msg->buf = (void*)q_msg + sizeof(*q_msg);
-	store_args(msg_id, vl, trc_msg);
+	store_args(msg_id, vl, trc_msg, qmsg_buffer(q_msg));
 	lf_queue_enqueue(trace_ctx.trace_queue, lfe);
 	va_end(vl);
 }
