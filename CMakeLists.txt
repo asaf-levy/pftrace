@@ -12,7 +12,7 @@ find_package(Threads REQUIRED)
 
 add_flags(CMAKE_C_FLAGS -Wall -Wextra -Werror -Wformat=2 -Wundef
         -Werror-implicit-function-declaration -Wno-unused-parameter -D_GNU_SOURCE
-        -O3 -g -Wstrict-prototypes -Wdeclaration-after-statement -Wno-tautological-compare)
-
+        -g -Wstrict-prototypes -Wdeclaration-after-statement -Wno-tautological-compare)
+# -O3
 add_subdirectory(src)
 include(CTest)
