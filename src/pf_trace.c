@@ -4,10 +4,11 @@
 #include <malloc.h>
 #include <stdbool.h>
 #include <errno.h>
-#include <assert.h>
 #include <string.h>
 #include "pf_trace.h"
+#include "pf_internal.h"
 #include "lf-queue/lf_queue.h"
+#include "pf_writer.h"
 
 #define TRACE_MSG_SIZE 512
 #define INITIAL_MSG_ID 8
@@ -19,30 +20,6 @@ typedef struct pf_trace {
     uint16_t current_msg_id;
     uint16_t *type_info[MAX_MSG_ID];
 } pf_trace_t;
-
-typedef struct fmt_msg {
-    uint16_t msg_id;
-    uint16_t fmt_len;
-    char *fmt;
-} fmt_msg_t;
-
-typedef struct trc_msg {
-    uint16_t msg_id;
-    uint16_t buf_len;
-    uint32_t tid;
-    uint64_t timestamp;
-    char *buff;
-} trc_msg_t;
-
-#define FMT_MSG_TYPE 1
-#define TRC_MSG_TYPE 2
-typedef struct queue_msg {
-    uint8_t type;
-    union {
-        fmt_msg_t fmt_msg;
-        trc_msg_t trc_msg;
-    };
-} queue_msg_t;
 
 static pf_trace_t trace_ctx;
 
@@ -69,6 +46,11 @@ int pf_trace_init(pf_trace_config_t *trace_cfg)
 		trace_ctx.type_info[i] = NULL;
 	}
 	trace_ctx.trace_cfg = *trace_cfg;
+	err = start_writer(trace_ctx.trace_queue);
+	if (err) {
+		lf_queue_destroy(trace_ctx.trace_queue);
+		return err;
+	}
 	return 0;
 }
 
@@ -76,6 +58,7 @@ int pf_trace_destroy(void)
 {
 	int i;
 
+	stop_writer();
 	for (i = 0; i < MAX_MSG_ID; ++i) {
 		free(trace_ctx.type_info[i]);
 	}
@@ -113,7 +96,7 @@ void build_fmt_msg(fmt_msg_t *fmt_msg, uint16_t msg_id, const char *file, int li
 	fmt_msg->msg_id = msg_id;
 	// TODO handle truncation
 	fmt_msg->fmt_len = snprintf(fmt_msg->fmt, TRACE_MSG_SIZE - sizeof(queue_msg_t),
-	                           "%s:%d %s [%s] %s", file, line, func,
+	                           "%s:%d %s [%s] %s", basename(file), line, func,
 	                            trc_level_to_str(level), fmt);
 }
 
@@ -162,14 +145,17 @@ int pf_trace_fmt(uint16_t msg_id, const char *file, int line,
 	}
 
 	res = store_fmt_info(msg_id, fmt);
-	if (!res) {
+	if (res != 0) {
+		// TODO test put after get
 		lf_queue_put(trace_ctx.trace_queue, lfe);
 		return res;
 	}
 	q_msg = lfe->data;
 	q_msg->type = FMT_MSG_TYPE;
 	fmt_msg = &q_msg->fmt_msg;
+	fmt_msg->fmt = (char*)q_msg + sizeof(*q_msg);
 	build_fmt_msg(fmt_msg, msg_id, file, line, func, level, fmt);
+	lf_queue_enqueue(trace_ctx.trace_queue, lfe);
 	return 0;
 }
 
@@ -265,7 +251,7 @@ void pf_trace(uint16_t msg_id, const char *fmt, ...)
 	queue_msg_t *q_msg;
 	trc_msg_t *trc_msg;
 
-	if (trace_ctx.type_info[msg_id] != NULL) {
+	if (trace_ctx.type_info[msg_id] == NULL) {
 		return;
 	}
 	res = lf_queue_get(trace_ctx.trace_queue, &lfe);
@@ -273,12 +259,14 @@ void pf_trace(uint16_t msg_id, const char *fmt, ...)
 		// no place in the trace queue now
 		return;
 	}
+	va_start(vl, fmt);
 	q_msg = lfe->data;
 	q_msg->type = TRC_MSG_TYPE;
 	trc_msg = &q_msg->trc_msg;
 	trc_msg->msg_id = msg_id;
 	trc_msg->tid = 0; // TODO
 	trc_msg->timestamp = 0; // TODO
+	trc_msg->buff = (void*)q_msg + sizeof(*q_msg);
 	store_args(msg_id, vl, trc_msg);
 	lf_queue_enqueue(trace_ctx.trace_queue, lfe);
 	va_end(vl);

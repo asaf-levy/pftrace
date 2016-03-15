@@ -23,6 +23,7 @@ typedef struct pf_trace_config {
 
 int pf_trace_init(pf_trace_config_t *trace_cfg);
 int pf_trace_destroy(void);
+
 uint16_t gen_msg_id(void);
 pf_trc_level_t get_trc_level(void);
 
