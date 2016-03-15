@@ -22,7 +22,7 @@ int main(void)
 	TRACE(PF_TRC_DEBUG, "hello %s", "bla");
 	trc_func(1);
 
-	sleep(5);
+	sleep(1);
 	pf_trace_destroy();
 	return 0;
 }

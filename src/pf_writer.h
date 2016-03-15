@@ -3,7 +3,7 @@
 
 #include <lf-queue/lf_queue.h>
 
-int start_writer(lf_queue_handle_t queue);
+int start_writer(lf_queue_handle_t queue, const char *file_name_prefix);
 int stop_writer(void);
 
 #endif

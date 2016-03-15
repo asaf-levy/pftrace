@@ -46,7 +46,7 @@ int pf_trace_init(pf_trace_config_t *trace_cfg)
 		trace_ctx.type_info[i] = NULL;
 	}
 	trace_ctx.trace_cfg = *trace_cfg;
-	err = start_writer(trace_ctx.trace_queue);
+	err = start_writer(trace_ctx.trace_queue, "./trace_test");
 	if (err) {
 		lf_queue_destroy(trace_ctx.trace_queue);
 		return err;
@@ -165,7 +165,7 @@ void store_arg(void *p, size_t sz, trc_msg_t *trc_msg)
 	if (TRACE_MSG_SIZE - sizeof(queue_msg_t) < sz) {
 		return;
 	} else {
-		memcpy(trc_msg->buff + trc_msg->buf_len, p, sz);
+		memcpy(trc_msg->buf + trc_msg->buf_len, p, sz);
 		trc_msg->buf_len += sz;
 	}
 }
@@ -266,7 +266,7 @@ void pf_trace(uint16_t msg_id, const char *fmt, ...)
 	trc_msg->msg_id = msg_id;
 	trc_msg->tid = 0; // TODO
 	trc_msg->timestamp = 0; // TODO
-	trc_msg->buff = (void*)q_msg + sizeof(*q_msg);
+	trc_msg->buf = (void*)q_msg + sizeof(*q_msg);
 	store_args(msg_id, vl, trc_msg);
 	lf_queue_enqueue(trace_ctx.trace_queue, lfe);
 	va_end(vl);
