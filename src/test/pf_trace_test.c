@@ -18,7 +18,7 @@ int main(void)
 	res = pf_trace_init(&trace_cfg);
 	assert(res == 0);
 	TRACE(PF_TRC_DEBUG, "hello");
-	TRACE(PF_TRC_DEBUG, "hello %d", 1);
+	TRACE(PF_TRC_DEBUG, "hello %d %lu %0.2f", 1, 8LU, 1.513123);
 	TRACE(PF_TRC_DEBUG, "hello %s", "bla");
 	trc_func(1);
 

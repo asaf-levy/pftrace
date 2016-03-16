@@ -107,6 +107,9 @@ int store_fmt_info(uint16_t msg_id, const char *fmt)
 
 	n_types = parse_printf_format(fmt, sizeof(types), types);
 	type_info = calloc(n_types + 1, sizeof(uint16_t));
+	if (type_info == NULL) {
+		return ENOMEM;
+	}
 	for (i = 0; i < n_types; ++i) {
 		// thou the types are ints in practice only 16 bits are used
 		type_info[i] = (uint16_t)types[i];

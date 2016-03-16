@@ -106,11 +106,20 @@ int init(const char *file_name_prefix)
 	return 0;
 }
 
+void close_file(FILE *file)
+{
+	if (file != NULL) {
+		fflush(file);
+		fsync(fileno(file));
+		fclose(file);
+	}
+}
+
 void terminate(void)
 {
 	// TODO error handling
-	fclose(wctx.md_file);
-	fclose(wctx.trc_file);
+	close_file(wctx.md_file);
+	close_file(wctx.trc_file);
 }
 
 int start_writer(lf_queue_handle_t queue, const char *file_name_prefix)
