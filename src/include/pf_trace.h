@@ -17,6 +17,7 @@ typedef enum pf_trc_level {
 } pf_trc_level_t;
 
 typedef struct pf_trace_config {
+    uint64_t max_trace_message_size;
     uint64_t trace_queue_size;
     pf_trc_level_t level;
 } pf_trace_config_t;

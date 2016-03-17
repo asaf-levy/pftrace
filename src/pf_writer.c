@@ -42,10 +42,14 @@ void write_trc_msg(trc_msg_t *msg, char *msg_buffer)
 		printf("md write failed written=%lu err=%d\n", written, errno);
 		return;
 	}
-	written = fwrite_unlocked(msg_buffer, 1, msg->buf_len, wctx.trc_file);
-	if (written !=  msg->buf_len) {
-		printf("md write failed  written=%lu err=%d\n", written, errno);
-		return;
+	if (msg->buf_len > 0) {
+		written = fwrite_unlocked(msg_buffer, 1, msg->buf_len,
+		                          wctx.trc_file);
+		if (written != msg->buf_len) {
+			printf("md write failed  written=%lu err=%d\n", written,
+			       errno);
+			return;
+		}
 	}
 }
 
@@ -59,7 +63,6 @@ void handle_queue_msg(lf_element_t *lfe)
 		write_fmt_msg(&msg->fmt_msg, qmsg_buffer(msg));
 		break;
 	case TRC_MSG_TYPE:
-		printf("got trc msg len=%u\n", msg->trc_msg.buf_len);
 		write_trc_msg(&msg->trc_msg, qmsg_buffer(msg));
 		break;
 	default:
@@ -101,6 +104,7 @@ int init(const char *file_name_prefix)
 		return errno;
 	}
 	snprintf(link_path, sizeof(link_path), "%s.latest.trc", file_name_prefix);
+	unlink(link_path);
 	symlink(file_path, link_path);
 
 	return 0;

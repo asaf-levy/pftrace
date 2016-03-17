@@ -10,7 +10,6 @@
 #include "lf-queue/lf_queue.h"
 #include "pf_writer.h"
 
-#define TRACE_MSG_SIZE 512
 #define INITIAL_MSG_ID 8
 
 typedef struct pf_trace {
@@ -36,7 +35,7 @@ int pf_trace_init(pf_trace_config_t *trace_cfg)
 	int i;
 	int err = lf_queue_init(&trace_ctx.trace_queue,
 	                        trace_cfg->trace_queue_size,
-	                        TRACE_MSG_SIZE);
+	                        trace_cfg->max_trace_message_size);
 	if (err) {
 		return err;
 	}
@@ -92,7 +91,8 @@ const char *trc_level_to_str(pf_trc_level_t level)
 int build_fmt(char *fmt_buffer, uint16_t msg_id, const char *file, int line,
               const char *func, pf_trc_level_t level, const char *fmt)
 {
-	return snprintf(fmt_buffer, TRACE_MSG_SIZE - sizeof(queue_msg_t),
+	return snprintf(fmt_buffer,
+	                trace_ctx.trace_cfg.max_trace_message_size - sizeof(queue_msg_t),
 	                "%s:%d %s [%s] %s", basename(file), line, func,
 	                trc_level_to_str(level), fmt);
 }
@@ -182,6 +182,7 @@ void store_args(uint16_t msg_id, va_list vl, trc_msg_t *trc_msg, char *msg_buffe
 	long double val_l_dbl;
 
 	uint16_t *types = trace_ctx.type_info[msg_id];
+	trc_msg->buf_len = 0;
 
 	for (i = 0 ; types[i] != PA_LAST ; i++) {
 		switch (types[i]) {
@@ -212,7 +213,7 @@ void store_args(uint16_t msg_id, va_list vl, trc_msg_t *trc_msg, char *msg_buffe
 			if (!val_str) {
 				val_str = (char *)"<NULL>";
 			}
-			store_arg((void *)val_str, strnlen(val_str, TRACE_MSG_SIZE + 1), trc_msg, msg_buffer);
+			store_arg((void *)val_str, strlen(val_str), trc_msg, msg_buffer);
 			break;
 		case PA_POINTER:
 			val_ptr = va_arg(vl, void *);
