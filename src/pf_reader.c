@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <printf.h>
+#include <unistd.h>
 #include "pf_internal.h"
 
 typedef struct reader_ctx {
@@ -18,28 +19,38 @@ static reader_ctx_t rctx;
 
 int init(const char *trc_file_name)
 {
+	ssize_t len;
 	char tmp_path[PATH_MAX];
 	char md_path[PATH_MAX];
 	char *trc_pos;
 	int i;
 
-	// TODO follow sym link
-
-	strncpy(tmp_path, trc_file_name, sizeof(tmp_path));
-	trc_pos = strstr(tmp_path, "trc");
-	if (trc_pos == NULL) {
-		printf("invalid trace file name %s\n", trc_file_name);
-		return EINVAL;
+	// check if we got a symlink
+	len = readlink(trc_file_name, tmp_path, sizeof(tmp_path)-1);
+	if (len == -1) {
+		if (errno != EINVAL) {
+			printf("failed to read %s\n", trc_file_name);
+			return 1;
+		}
+		// not a link use the name we got
+		strncpy(tmp_path, trc_file_name, sizeof(tmp_path));
+		tmp_path[len] = '\0';
 	}
-	*trc_pos = 0;
-	snprintf(md_path, sizeof(md_path), "%smd", tmp_path);
 
-	rctx.trc_file = fopen(trc_file_name, "r");
+	rctx.trc_file = fopen(tmp_path, "r");
 	if (rctx.trc_file == NULL) {
 		printf("failed to open %s err=%d\n", trc_file_name, errno);
 		return errno;
 	}
 
+	trc_pos = strstr(tmp_path, "trc");
+	if (trc_pos == NULL) {
+		fclose(rctx.trc_file);
+		printf("invalid trace file name %s\n", trc_file_name);
+		return EINVAL;
+	}
+	*trc_pos = 0;
+	snprintf(md_path, sizeof(md_path), "%smd", tmp_path);
 	rctx.md_file = fopen(md_path, "r");
 	if (rctx.md_file == NULL) {
 		fclose(rctx.trc_file);
