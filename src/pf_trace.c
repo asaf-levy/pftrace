@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <string.h>
+#include <time.h>
 #include "pf_trace.h"
 #include "pf_internal.h"
 #include "lf-queue/lf_queue.h"
@@ -93,7 +94,7 @@ int build_fmt(char *fmt_buffer, uint16_t msg_id, const char *file, int line,
 {
 	return snprintf(fmt_buffer,
 	                trace_ctx.trace_cfg.max_trace_message_size - sizeof(queue_msg_t),
-	                "%s:%d %s [%s] %s", basename(file), line, func,
+	                "%s:%d %s() [%s] %s", basename(file), line, func,
 	                trc_level_to_str(level), fmt);
 }
 
@@ -155,7 +156,8 @@ int pf_trace_fmt(uint16_t msg_id, const char *file, int line,
 	fmt_msg = &q_msg->fmt_msg;
 	fmt_msg->msg_id = msg_id;
 	// TODO handle truncation
-	fmt_msg->fmt_len = build_fmt(qmsg_buffer(q_msg), msg_id, file, line, func, level, fmt);
+	fmt_msg->fmt_len = build_fmt(qmsg_buffer(q_msg), msg_id, file, line,
+	                             func, level, fmt);
 	lf_queue_enqueue(trace_ctx.trace_queue, lfe);
 	return 0;
 }
@@ -248,6 +250,7 @@ void pf_trace(uint16_t msg_id, const char *fmt, ...)
 	lf_element_t *lfe;
 	queue_msg_t *q_msg;
 	trc_msg_t *trc_msg;
+	struct timespec now;
 
 	if (trace_ctx.type_info[msg_id] == NULL) {
 		return;
@@ -257,13 +260,15 @@ void pf_trace(uint16_t msg_id, const char *fmt, ...)
 		// no place in the trace queue now
 		return;
 	}
+	clock_gettime(CLOCK_REALTIME, &now);
+
 	va_start(vl, fmt);
 	q_msg = lfe->data;
 	q_msg->type = TRC_MSG_TYPE;
 	trc_msg = &q_msg->trc_msg;
 	trc_msg->msg_id = msg_id;
-	trc_msg->tid = 0; // TODO
-	trc_msg->timestamp = 0; // TODO
+	trc_msg->tid = (uint16_t)get_tid();
+	trc_msg->timestamp_nsec = (uint64_t)(now.tv_nsec + (now.tv_sec * NSEC_IN_SEC));
 	store_args(msg_id, vl, trc_msg, qmsg_buffer(q_msg));
 	lf_queue_enqueue(trace_ctx.trace_queue, lfe);
 	va_end(vl);

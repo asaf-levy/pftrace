@@ -13,17 +13,18 @@ typedef struct version_msg {
 
 #define MD_FILE_MAGIC   0x0123abcd
 #define TRC_FILE_MAGIC  0x0123abce
+#define NSEC_IN_SEC     1000000000
 
-typedef struct fmt_msg {
+typedef struct __attribute__((packed)) fmt_msg {
     uint16_t msg_id;
     uint16_t fmt_len;
 } fmt_msg_t;
 
-typedef struct trc_msg {
+typedef struct __attribute__((packed)) trc_msg {
+    uint64_t timestamp_nsec;
     uint16_t msg_id;
     uint16_t buf_len;
-    uint32_t tid;
-    uint64_t timestamp;
+    uint16_t tid;
 } trc_msg_t;
 
 #define FMT_MSG_TYPE 1

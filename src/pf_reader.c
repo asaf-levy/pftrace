@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <printf.h>
 #include <unistd.h>
+#include <time.h>
 #include "pf_internal.h"
 
 typedef struct reader_ctx {
@@ -219,18 +220,37 @@ void parse_trc_msg(char *p_out, char *p_fmt, char *buf, uint16_t *type_info)
 	*p_out = '\0';
 }
 
+size_t append_time(trc_msg_t *trc_msg, char *p_out)
+{
+	time_t nsec = trc_msg->timestamp_nsec % NSEC_IN_SEC;
+	time_t sec = trc_msg->timestamp_nsec / NSEC_IN_SEC;
+	size_t res;
+
+	struct tm *lt = localtime(&sec);
+	if (lt == NULL) {
+		printf("local time failed, error %d\n", errno);
+		return 0;
+	}
+	res = strftime(p_out, MAX_OUTPUT_SIZE, "%Y-%m-%d %T", lt);
+	if (res == 0) {
+		printf("strftime failed, error %d\n", errno);
+		return 0;
+	}
+	return res + sprintf(p_out + res, ".%09ld (%u) ", nsec, trc_msg->tid);
+}
+
 void print_trc_msg(trc_msg_t *trc_msg, char *buf)
 {
 	char output[MAX_OUTPUT_SIZE];
+	size_t res;
 
 	if (rctx.formats[trc_msg->msg_id] == NULL) {
 		printf("trace msg %u has no format\n", trc_msg->msg_id);
 		return;
 	}
 
-	// TODO print time stamp and thread id
-
-	parse_trc_msg(output, rctx.formats[trc_msg->msg_id], buf,
+	res = append_time(trc_msg, output);
+	parse_trc_msg(output + res, rctx.formats[trc_msg->msg_id], buf,
 	              rctx.type_info[trc_msg->msg_id]);
 
 	printf(output);
