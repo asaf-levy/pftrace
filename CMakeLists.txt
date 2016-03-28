@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 2.8.12)
 project(lockfree_queue)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-
 macro(add_flags var)
     string(REPLACE ";" " " _flags "${ARGN}")
     set(${var} "${${var}} ${_flags}")
@@ -12,7 +10,7 @@ find_package(Threads REQUIRED)
 
 add_flags(CMAKE_C_FLAGS -Wall -Wextra -Werror -Wformat=2 -Wundef
         -Werror-implicit-function-declaration -Wno-unused-parameter -D_GNU_SOURCE
-        -g -Wdeclaration-after-statement)
-# -O3
+        -O3 -g -Wdeclaration-after-statement)
+
 add_subdirectory(src)
 include(CTest)

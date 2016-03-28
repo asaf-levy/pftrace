@@ -57,8 +57,6 @@ static void handle_queue_msg(pf_writer_impl_t *writer, lf_element_t *lfe)
 	queue_msg_t *msg = lfe->data;
 	switch (msg->type) {
 	case FMT_MSG_TYPE:
-		printf("got fmt msg len=%u fmt=%s\n", msg->fmt_msg.fmt_len,
-		       qmsg_buffer(msg));
 		write_fmt_msg(writer, &msg->fmt_msg, qmsg_buffer(msg));
 		break;
 	case TRC_MSG_TYPE:
@@ -73,30 +71,47 @@ static void *writer_func(void *arg)
 {
 	pf_writer_impl_t *writer = arg;
 	lf_element_t lfe;
+	bool flush = false;
 
 	while (!writer->stop) {
 		if (lf_queue_dequeue(writer->queue, &lfe) == 0) {
 			handle_queue_msg(writer, &lfe);
 			lf_queue_put(writer->queue, &lfe);
+			flush = true;
 		} else {
-			usleep(1000);
+			if (flush) {
+				fflush(writer->md_file);
+				fflush(writer->trc_file);
+				flush = false;
+			} else {
+				usleep(1000);
+			}
 		}
 	}
 	return 0;
 }
 
-static int writer_init(pf_writer_impl_t *writer, const char *file_name_prefix)
+static void flush_queue(pf_writer_impl_t *writer)
+{
+	lf_element_t lfe;
+	while (lf_queue_dequeue(writer->queue, &lfe) == 0) {
+		handle_queue_msg(writer, &lfe);
+		lf_queue_put(writer->queue, &lfe);
+	}
+}
+
+static int writer_init(pf_writer_impl_t *writer, const char *file_name_prefix, int pid)
 {
 	char file_path[PATH_MAX];
 	char link_path[PATH_MAX];
 
-	snprintf(file_path, sizeof(file_path), "%s.%d.md", file_name_prefix, getpid());
+	snprintf(file_path, sizeof(file_path), "%s.%d.md", file_name_prefix, pid);
 	writer->md_file = fopen(file_path, "w");
 	if (writer->md_file == NULL) {
 		printf("failed to open %s err=%d\n", file_path, errno);
 		return errno;
 	}
-	snprintf(file_path, sizeof(file_path), "%s.%d.trc", file_name_prefix, getpid());
+	snprintf(file_path, sizeof(file_path), "%s.%d.trc", file_name_prefix, pid);
 	writer->trc_file = fopen(file_path, "w");
 	if (writer->trc_file == NULL) {
 		fclose(writer->md_file);
@@ -121,12 +136,12 @@ static void close_file(FILE *file)
 
 static void writer_terminate(pf_writer_impl_t *writer)
 {
-	// TODO error handling
 	close_file(writer->md_file);
 	close_file(writer->trc_file);
 }
 
-int pf_writer_start(pf_writer_t *writer, lf_queue_handle_t queue, const char *file_name_prefix)
+int pf_writer_start(pf_writer_t *writer, lf_queue_handle_t queue,
+                    const char *file_name_prefix, int pid)
 {
 	int res;
 	pf_writer_impl_t *writer_impl;
@@ -139,8 +154,9 @@ int pf_writer_start(pf_writer_t *writer, lf_queue_handle_t queue, const char *fi
 	writer_impl->queue = queue;
 	writer_impl->stop = false;
 
-	res = writer_init(writer_impl, file_name_prefix);
+	res = writer_init(writer_impl, file_name_prefix, pid);
 	if (res != 0) {
+		free(writer_impl);
 		return res;
 	}
 
@@ -158,6 +174,8 @@ int pf_writer_stop(pf_writer_t *writer)
 	pf_writer_impl_t *writer_impl = writer->handle;
 	writer_impl->stop = true;
 	pthread_join(writer_impl->writer_thread, NULL);
+	flush_queue(writer_impl);
 	writer_terminate(writer_impl);
+	free(writer_impl);
 	return 0;
 }

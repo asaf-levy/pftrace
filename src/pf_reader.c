@@ -35,7 +35,7 @@ int init(const char *trc_file_name)
 		}
 		// not a link use the name we got
 		strncpy(tmp_path, trc_file_name, sizeof(tmp_path));
-		tmp_path[len] = '\0';
+		tmp_path[sizeof(tmp_path) - 1] = '\0';
 	}
 
 	rctx.trc_file = fopen(tmp_path, "r");

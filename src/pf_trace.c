@@ -44,7 +44,7 @@ static int local_init() {
 		return err;
 	}
 	err = pf_writer_start(&trace_ctx.writer, trace_ctx.trace_queue,
-	                      trace_ctx.trace_cfg.file_name_prefix);
+	                      trace_ctx.trace_cfg.file_name_prefix, getpid());
 	if (err) {
 		lf_queue_destroy(trace_ctx.trace_queue);
 		return err;
@@ -61,7 +61,7 @@ static int send_setup_message(const char *shm_name)
 	int res;
 
 	res = lf_shm_queue_attach(&shm_queue, DEAMON_SHM_NAME,
-	                        DEAMON_QUEUE_SIZE, sizeof(daemon_msg_t));
+	                          DEAMON_QUEUE_SIZE, sizeof(daemon_msg_t));
 	if (res != 0) {
 		printf("lf_shm_queue_attach failed err=%d", res);
 		return res;
@@ -83,7 +83,7 @@ static int send_setup_message(const char *shm_name)
 	msg->cfg = trace_ctx.trace_cfg;
 
 	lf_queue_enqueue(queue, &element);
-	lf_shm_queue_destroy(shm_queue);
+	lf_shm_queue_deattach(shm_queue);
 	return 0;
 }
 
@@ -127,7 +127,7 @@ int pf_trace_destroy(void)
 	int i;
 
 	if (trace_ctx.trace_cfg.use_trace_daemon) {
-		lf_shm_queue_destroy(trace_ctx.shm_trace_queue);
+//		lf_shm_queue_destroy(trace_ctx.shm_trace_queue);
 	} else {
 		pf_writer_stop(&trace_ctx.writer);
 		lf_queue_destroy(trace_ctx.trace_queue);
