@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <bits/time.h>
 #include <time.h>
+#include <stdbool.h>
 #include "pf_trace.h"
 
 void trc_func()
@@ -13,12 +14,11 @@ void trc_func()
 
 	clock_gettime(CLOCK_REALTIME, &start);
 	for (i = 0; i < 1000000; i++) {
-		TRACE(PF_TRC_DEBUG, "i=%d", i);
+		trc_ntc("i=%d", i);
 	}
 	clock_gettime(CLOCK_REALTIME, &end);
 
 	printf("msec=%lu\n", (((end.tv_sec - start.tv_sec) * 1000000000) + end.tv_nsec - start.tv_nsec) / 1000000);
-
 }
 
 int main(void)
@@ -28,13 +28,16 @@ int main(void)
 		.max_trace_message_size = 64,
 		.trace_queue_size = 500000,
 		.level = PF_TRC_DEBUG,
+		.use_trace_daemon = true,
+		.file_name_prefix = "./pf_trace_test",
 	};
 
 	res = pf_trace_init(&trace_cfg);
+	sleep(1);
 	assert(res == 0);
-	TRACE(PF_TRC_DEBUG, "hello");
-	TRACE(PF_TRC_DEBUG, "hello %d %lu %0.2f", 1, 8LU, 1.513123);
-	TRACE(PF_TRC_DEBUG, "hello %s", "bla");
+	trc_dbg("hello");
+	trc_dbg("hello %d %lu %0.2f", 1, 8LU, 1.513123);
+	trc_dbg("hello %s", "bla");
 	trc_func();
 
 	sleep(1);

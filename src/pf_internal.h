@@ -2,6 +2,7 @@
 #define __PF_INTERNAL_H_INCLUDED__
 
 #include <stdint.h>
+#include "pf_trace.h"
 
 #define PF_MAX_MSG_ID 65535
 
@@ -14,6 +15,8 @@ typedef struct version_msg {
 #define MD_FILE_MAGIC   0x0123abcd
 #define TRC_FILE_MAGIC  0x0123abce
 #define NSEC_IN_SEC     1000000000
+#define DEAMON_QUEUE_SIZE 8
+#define DEAMON_SHM_NAME  "/pf_trc_daemon"
 
 typedef struct __attribute__((packed)) fmt_msg {
     uint16_t msg_id;
@@ -37,6 +40,13 @@ typedef struct queue_msg {
     };
     // followed by the message buffer
 } queue_msg_t;
+
+typedef struct daemon_msg {
+    int proc_pid;
+    char file_name_prefix[PF_MAX_NAME];
+    char shm_name[PF_MAX_NAME];
+    pf_trace_config_t cfg;
+} daemon_msg_t;
 
 static inline char *qmsg_buffer(queue_msg_t *queue_msg) {
 	return (char*)queue_msg + sizeof(*queue_msg);

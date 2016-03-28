@@ -1,4 +1,5 @@
-#include <syscall.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <printf.h>
 #include <malloc.h>
@@ -6,16 +7,20 @@
 #include <errno.h>
 #include <string.h>
 #include <time.h>
+#include <syscall.h>
+#include <lf-queue/lf_queue.h>
+#include <lf-queue/lf_shm_queue.h>
 #include "pf_trace.h"
 #include "pf_internal.h"
-#include "lf-queue/lf_queue.h"
 #include "pf_writer.h"
 
 #define INITIAL_MSG_ID 8
 
 typedef struct pf_trace {
     pf_trace_config_t trace_cfg;
+    pf_writer_t writer;
     lf_queue_handle_t trace_queue;
+    lf_shm_queue_handle_t shm_trace_queue;
     uint16_t current_msg_id;
     uint16_t *type_info[PF_MAX_MSG_ID];
 } pf_trace_t;
@@ -31,21 +36,15 @@ pid_t get_tid(void)
 	return g_tid;
 }
 
-int pf_trace_init(pf_trace_config_t *trace_cfg)
-{
-	int i;
+static int local_init() {
 	int err = lf_queue_init(&trace_ctx.trace_queue,
-	                        trace_cfg->trace_queue_size,
-	                        trace_cfg->max_trace_message_size);
+	                        trace_ctx.trace_cfg.trace_queue_size,
+	                        trace_ctx.trace_cfg.max_trace_message_size);
 	if (err) {
 		return err;
 	}
-	trace_ctx.current_msg_id = INITIAL_MSG_ID;
-	for (i = 0; i < PF_MAX_MSG_ID; ++i) {
-		trace_ctx.type_info[i] = NULL;
-	}
-	trace_ctx.trace_cfg = *trace_cfg;
-	err = start_writer(trace_ctx.trace_queue, "./trace_test");
+	err = pf_writer_start(&trace_ctx.writer, trace_ctx.trace_queue,
+	                      trace_ctx.trace_cfg.file_name_prefix);
 	if (err) {
 		lf_queue_destroy(trace_ctx.trace_queue);
 		return err;
@@ -53,15 +52,89 @@ int pf_trace_init(pf_trace_config_t *trace_cfg)
 	return 0;
 }
 
+static int send_setup_message(const char *shm_name)
+{
+	lf_element_t element;
+	lf_shm_queue_handle_t shm_queue;
+	lf_queue_handle_t queue;
+	daemon_msg_t *msg;
+	int res;
+
+	res = lf_shm_queue_attach(&shm_queue, DEAMON_SHM_NAME,
+	                        DEAMON_QUEUE_SIZE, sizeof(daemon_msg_t));
+	if (res != 0) {
+		printf("lf_shm_queue_attach failed err=%d", res);
+		return res;
+	}
+
+	queue = lf_shm_queue_get_underlying_handle(shm_queue);
+	res = lf_queue_get(queue, &element);
+	if (res != 0) {
+		lf_shm_queue_destroy(shm_queue);
+		printf("lf_queue_get failed err=%d", res);
+		return res;
+	}
+	msg = element.data;
+
+	strncpy(msg->file_name_prefix, trace_ctx.trace_cfg.file_name_prefix,
+	        sizeof(msg->file_name_prefix));
+	msg->proc_pid = getpid();
+	strncpy(msg->shm_name, shm_name, sizeof(msg->shm_name));
+	msg->cfg = trace_ctx.trace_cfg;
+
+	lf_queue_enqueue(queue, &element);
+	lf_shm_queue_destroy(shm_queue);
+	return 0;
+}
+
+static int daemon_init()
+{
+	int res;
+	char shm_name[PF_MAX_NAME];
+	pid_t pid = getpid();
+
+	snprintf(shm_name, sizeof(shm_name), "pf_trace_mem.%d", pid);
+	res = lf_shm_queue_init(&trace_ctx.shm_trace_queue, shm_name,
+	                        trace_ctx.trace_cfg.trace_queue_size,
+	                        trace_ctx.trace_cfg.max_trace_message_size);
+	if (res != 0) {
+		printf("lf_shm_queue_init failed err=%d", res);
+		return res;
+	}
+	trace_ctx.trace_queue = lf_shm_queue_get_underlying_handle(trace_ctx.shm_trace_queue);
+	return send_setup_message(shm_name);
+}
+
+int pf_trace_init(pf_trace_config_t *trace_cfg)
+{
+	int i;
+
+	trace_ctx.current_msg_id = INITIAL_MSG_ID;
+	for (i = 0; i < PF_MAX_MSG_ID; ++i) {
+		trace_ctx.type_info[i] = NULL;
+	}
+	trace_ctx.trace_cfg = *trace_cfg;
+
+	if (trace_cfg->use_trace_daemon) {
+		return daemon_init();
+	} else {
+		return local_init();
+	}
+}
+
 int pf_trace_destroy(void)
 {
 	int i;
 
-	stop_writer();
+	if (trace_ctx.trace_cfg.use_trace_daemon) {
+		lf_shm_queue_destroy(trace_ctx.shm_trace_queue);
+	} else {
+		pf_writer_stop(&trace_ctx.writer);
+		lf_queue_destroy(trace_ctx.trace_queue);
+	}
 	for (i = 0; i < PF_MAX_MSG_ID; ++i) {
 		free(trace_ctx.type_info[i]);
 	}
-	lf_queue_destroy(trace_ctx.trace_queue);
 	return 0;
 }
 
@@ -75,6 +148,10 @@ pf_trc_level_t get_trc_level(void)
 	return trace_ctx.trace_cfg.level;
 }
 
+void pf_trace_set_level(pf_trc_level_t level)
+{
+	trace_ctx.trace_cfg.level = level;
+}
 
 const char *trc_level_to_str(pf_trc_level_t level)
 {
@@ -89,16 +166,16 @@ const char *trc_level_to_str(pf_trc_level_t level)
 	}
 }
 
-int build_fmt(char *fmt_buffer, uint16_t msg_id, const char *file, int line,
+static int build_fmt(char *fmt_buffer, uint16_t msg_id, const char *file, int line,
               const char *func, pf_trc_level_t level, const char *fmt)
 {
 	return snprintf(fmt_buffer,
 	                trace_ctx.trace_cfg.max_trace_message_size - sizeof(queue_msg_t),
-	                "%s:%d %s() [%s] %s", basename(file), line, func,
-	                trc_level_to_str(level), fmt);
+	                "[%s] %s:%d %s() %s", trc_level_to_str(level),
+	                basename(file), line, func, fmt);
 }
 
-int store_fmt_info(uint16_t msg_id, const char *fmt)
+static int store_fmt_info(uint16_t msg_id, const char *fmt)
 {
 	size_t i;
 	int types[128];
@@ -132,7 +209,7 @@ int pf_trace_fmt(uint16_t msg_id, const char *file, int line,
 {
 	queue_msg_t *q_msg;
 	fmt_msg_t *fmt_msg;
-	lf_element_t *lfe;
+	lf_element_t lfe;
 	int res;
 
 	if (trace_ctx.type_info[msg_id] != NULL) {
@@ -148,28 +225,28 @@ int pf_trace_fmt(uint16_t msg_id, const char *file, int line,
 	res = store_fmt_info(msg_id, fmt);
 	if (res != 0) {
 		// TODO test put after get
-		lf_queue_put(trace_ctx.trace_queue, lfe);
+		lf_queue_put(trace_ctx.trace_queue, &lfe);
 		return res;
 	}
-	q_msg = lfe->data;
+	q_msg = lfe.data;
 	q_msg->type = FMT_MSG_TYPE;
 	fmt_msg = &q_msg->fmt_msg;
 	fmt_msg->msg_id = msg_id;
 	// TODO handle truncation
 	fmt_msg->fmt_len = build_fmt(qmsg_buffer(q_msg), msg_id, file, line,
 	                             func, level, fmt);
-	lf_queue_enqueue(trace_ctx.trace_queue, lfe);
+	lf_queue_enqueue(trace_ctx.trace_queue, &lfe);
 	return 0;
 }
 
-void store_arg(void *p, size_t sz, trc_msg_t *trc_msg, char *msg_buffer)
+static void store_arg(void *p, size_t sz, trc_msg_t *trc_msg, char *msg_buffer)
 {
 	// TODO handle buffer overrun
 	memcpy(msg_buffer + trc_msg->buf_len, p, sz);
 	trc_msg->buf_len += sz;
 }
 
-void store_args(uint16_t msg_id, va_list vl, trc_msg_t *trc_msg, char *msg_buffer)
+static void store_args(uint16_t msg_id, va_list vl, trc_msg_t *trc_msg, char *msg_buffer)
 {
 	int i;
 	int val_int;
@@ -247,7 +324,7 @@ void pf_trace(uint16_t msg_id, const char *fmt, ...)
 {
 	int res;
 	va_list vl;
-	lf_element_t *lfe;
+	lf_element_t lfe;
 	queue_msg_t *q_msg;
 	trc_msg_t *trc_msg;
 	struct timespec now;
@@ -263,15 +340,13 @@ void pf_trace(uint16_t msg_id, const char *fmt, ...)
 	clock_gettime(CLOCK_REALTIME, &now);
 
 	va_start(vl, fmt);
-	q_msg = lfe->data;
+	q_msg = lfe.data;
 	q_msg->type = TRC_MSG_TYPE;
 	trc_msg = &q_msg->trc_msg;
 	trc_msg->msg_id = msg_id;
 	trc_msg->tid = (uint16_t)get_tid();
 	trc_msg->timestamp_nsec = (uint64_t)(now.tv_nsec + (now.tv_sec * NSEC_IN_SEC));
 	store_args(msg_id, vl, trc_msg, qmsg_buffer(q_msg));
-	lf_queue_enqueue(trace_ctx.trace_queue, lfe);
+	lf_queue_enqueue(trace_ctx.trace_queue, &lfe);
 	va_end(vl);
 }
-
-
