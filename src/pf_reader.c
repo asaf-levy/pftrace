@@ -13,12 +13,11 @@ typedef struct reader_ctx {
     FILE *trc_file;
     char *formats[PF_MAX_MSG_ID];
     uint16_t *type_info[PF_MAX_MSG_ID];
-
 } reader_ctx_t;
 
 static reader_ctx_t rctx;
 
-int init(const char *trc_file_name)
+static int init(const char *trc_file_name)
 {
 	ssize_t len;
 	char tmp_path[PATH_MAX];
@@ -66,7 +65,7 @@ int init(const char *trc_file_name)
 	return 0;
 }
 
-void terminate(void)
+static void terminate(void)
 {
 	int i;
 
@@ -78,13 +77,13 @@ void terminate(void)
 	}
 }
 
-void usage(const char *exec_name)
+static void usage(const char *exec_name)
 {
 	printf("%s [trace file path]\n", exec_name);
 	exit(1);
 }
 
-void read_fmt_msg(void)
+static void read_fmt_msg(void)
 {
 	int types[128];
 	size_t i;
@@ -134,7 +133,7 @@ void read_fmt_msg(void)
 	rctx.type_info[fmt_msg.msg_id][i] = PA_LAST;
 }
 
-void read_md_file(void)
+static void read_md_file(void)
 {
 	while (feof(rctx.md_file) == 0) {
 		read_fmt_msg();
@@ -144,7 +143,7 @@ void read_md_file(void)
 #pragma GCC diagnostic ignored "-Wformat-nonliteral"
 #pragma GCC diagnostic ignored "-Wformat-security"
 #define MAX_OUTPUT_SIZE 4096
-void parse_trc_msg(char *p_out, char *p_fmt, char *buf, uint16_t *type_info)
+static void parse_trc_msg(char *p_out, char *p_fmt, char *buf, uint16_t *type_info)
 {
 	int i = 0;
 	char *lit_end;
@@ -220,7 +219,7 @@ void parse_trc_msg(char *p_out, char *p_fmt, char *buf, uint16_t *type_info)
 	*p_out = '\0';
 }
 
-size_t append_time(trc_msg_t *trc_msg, char *p_out)
+static size_t append_time(trc_msg_t *trc_msg, char *p_out)
 {
 	time_t nsec = trc_msg->timestamp_nsec % NSEC_IN_SEC;
 	time_t sec = trc_msg->timestamp_nsec / NSEC_IN_SEC;
@@ -239,7 +238,7 @@ size_t append_time(trc_msg_t *trc_msg, char *p_out)
 	return res + sprintf(p_out + res, ".%09ld (%u) ", nsec, trc_msg->tid);
 }
 
-void print_trc_msg(trc_msg_t *trc_msg, char *buf)
+static void print_trc_msg(trc_msg_t *trc_msg, char *buf)
 {
 	char output[MAX_OUTPUT_SIZE];
 	size_t res;
@@ -258,7 +257,7 @@ void print_trc_msg(trc_msg_t *trc_msg, char *buf)
 #pragma GCC diagnostic warning "-Wformat-nonliteral"
 #pragma GCC diagnostic warning "-Wformat-security"
 
-void read_trc_msg(void)
+static void read_trc_msg(void)
 {
 	char buf[512];
 	size_t bytes_read;
@@ -284,14 +283,14 @@ void read_trc_msg(void)
 	print_trc_msg(&trc_msg, buf);
 }
 
-void read_trc_file(void)
+static void read_trc_file(void)
 {
 	while (feof(rctx.trc_file) == 0) {
 		read_trc_msg();
 	}
 }
 
-void print_traces(void)
+static void print_traces(void)
 {
 	read_md_file();
 	read_trc_file();

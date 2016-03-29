@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include "pf_trace.h"
 
-void trc_func()
+static void trc_func()
 {
 	int i;
 	struct timespec start;
@@ -28,7 +28,7 @@ int main(void)
 		.max_trace_message_size = 64,
 		.trace_queue_size = 500000,
 		.level = PF_TRC_DEBUG,
-		.use_trace_daemon = true,
+		.use_trace_daemon = false,
 		.file_name_prefix = "./pf_trace_test",
 	};
 

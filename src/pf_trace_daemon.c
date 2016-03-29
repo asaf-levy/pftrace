@@ -8,7 +8,7 @@
 #include "pf_writer.h"
 
 typedef struct trace_proc {
-    pf_writer_t writer;
+    pf_writer *writer;
     lf_shm_queue *trace_queue;
     pid_t pid;
     bool proc_lost;
@@ -26,7 +26,7 @@ static daemon_ctx_t dctx;
 static void proc_stop(trace_proc_t *proc, bool process_lost)
 {
 	printf("stopping trace for pid=%d\n", proc->pid);
-	pf_writer_stop(&proc->writer);
+	pf_writer_stop(proc->writer);
 	if (process_lost) {
 		// if the process was lost destroy so the shared memory segment
 		// will be unlinked
@@ -39,8 +39,6 @@ static void proc_stop(trace_proc_t *proc, bool process_lost)
 
 static void proc_start(daemon_setup_msg_t *msg, trace_proc_t *proc)
 {
-	int res;
-
 	proc->pid = 0;
 
 	printf("Start tracing for file_name=%s shm_name=%s pid=%d\n",
@@ -53,12 +51,11 @@ static void proc_start(daemon_setup_msg_t *msg, trace_proc_t *proc)
 		return;
 	}
 
-	res = pf_writer_start(&proc->writer,
-	                      lf_shm_queue_get_underlying_handle(proc->trace_queue),
+	proc->writer = pf_writer_start(lf_shm_queue_get_underlying_handle(proc->trace_queue),
 	                      msg->file_name_prefix, msg->proc_pid);
-	if (res != 0) {
+	if (proc->writer == NULL) {
 		lf_shm_queue_deattach(proc->trace_queue);
-		printf("pf_writer_start failed err=%d\n", res);
+		printf("pf_writer_start failed\n");
 		return;
 	}
 	proc->pid = msg->proc_pid;

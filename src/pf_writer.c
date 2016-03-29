@@ -8,15 +8,15 @@
 #include <errno.h>
 #include <stdlib.h>
 
-typedef struct pf_writer_impl {
+struct pf_writer {
     bool stop;
     pthread_t writer_thread;
     lf_queue *queue;
     FILE *md_file;
     FILE *trc_file;
-} pf_writer_impl_t;
+};
 
-static void write_fmt_msg(pf_writer_impl_t *writer, fmt_msg_t *msg, char *fmt_buf)
+static void write_fmt_msg(pf_writer *writer, fmt_msg_t *msg, char *fmt_buf)
 {
 	size_t written;
 
@@ -32,7 +32,7 @@ static void write_fmt_msg(pf_writer_impl_t *writer, fmt_msg_t *msg, char *fmt_bu
 	}
 }
 
-static void write_trc_msg(pf_writer_impl_t *writer, trc_msg_t *msg, char *msg_buffer)
+static void write_trc_msg(pf_writer *writer, trc_msg_t *msg, char *msg_buffer)
 {
 	size_t written;
 
@@ -52,7 +52,7 @@ static void write_trc_msg(pf_writer_impl_t *writer, trc_msg_t *msg, char *msg_bu
 	}
 }
 
-static void handle_queue_msg(pf_writer_impl_t *writer, lf_element_t *lfe)
+static void handle_queue_msg(pf_writer *writer, lf_element_t *lfe)
 {
 	queue_msg_t *msg = lfe->data;
 	switch (msg->type) {
@@ -69,7 +69,7 @@ static void handle_queue_msg(pf_writer_impl_t *writer, lf_element_t *lfe)
 
 static void *writer_func(void *arg)
 {
-	pf_writer_impl_t *writer = arg;
+	pf_writer *writer = arg;
 	lf_element_t lfe;
 	bool flush = false;
 
@@ -91,7 +91,7 @@ static void *writer_func(void *arg)
 	return 0;
 }
 
-static void flush_queue(pf_writer_impl_t *writer)
+static void flush_queue(pf_writer *writer)
 {
 	lf_element_t lfe;
 	while (lf_queue_dequeue(writer->queue, &lfe) == 0) {
@@ -100,7 +100,7 @@ static void flush_queue(pf_writer_impl_t *writer)
 	}
 }
 
-static int writer_init(pf_writer_impl_t *writer, const char *file_name_prefix, int pid)
+static int writer_init(pf_writer *writer, const char *file_name_prefix, int pid)
 {
 	char file_path[PATH_MAX];
 	char link_path[PATH_MAX];
@@ -134,48 +134,44 @@ static void close_file(FILE *file)
 	}
 }
 
-static void writer_terminate(pf_writer_impl_t *writer)
+static void writer_terminate(pf_writer *writer)
 {
 	close_file(writer->md_file);
 	close_file(writer->trc_file);
 }
 
-int pf_writer_start(pf_writer_t *writer, lf_queue *queue,
-                    const char *file_name_prefix, int pid)
+pf_writer *pf_writer_start(lf_queue *queue, const char *file_name_prefix, int pid)
 {
 	int res;
-	pf_writer_impl_t *writer_impl;
 
-	writer_impl = malloc(sizeof(*writer_impl));
-	if (writer_impl == NULL) {
-		return ENOMEM;
+	pf_writer *writer = malloc(sizeof(*writer));
+	if (writer == NULL) {
+		return NULL;
 	}
 
-	writer_impl->queue = queue;
-	writer_impl->stop = false;
+	writer->queue = queue;
+	writer->stop = false;
 
-	res = writer_init(writer_impl, file_name_prefix, pid);
+	res = writer_init(writer, file_name_prefix, pid);
 	if (res != 0) {
-		free(writer_impl);
-		return res;
+		free(writer);
+		return NULL;
 	}
 
-	res = pthread_create(&writer_impl->writer_thread, NULL, writer_func, writer_impl);
+	res = pthread_create(&writer->writer_thread, NULL, writer_func, writer);
 	if (res != 0) {
-		free(writer_impl);
-		return res;
+		free(writer);
+		return NULL;
 	}
-	writer->handle = writer_impl;
-	return 0;
+	return writer;
 }
 
-int pf_writer_stop(pf_writer_t *writer)
+int pf_writer_stop(pf_writer *writer)
 {
-	pf_writer_impl_t *writer_impl = writer->handle;
-	writer_impl->stop = true;
-	pthread_join(writer_impl->writer_thread, NULL);
-	flush_queue(writer_impl);
-	writer_terminate(writer_impl);
-	free(writer_impl);
+	writer->stop = true;
+	pthread_join(writer->writer_thread, NULL);
+	flush_queue(writer);
+	writer_terminate(writer);
+	free(writer);
 	return 0;
 }

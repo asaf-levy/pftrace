@@ -18,7 +18,7 @@
 
 typedef struct pf_trace {
     pf_trace_config_t trace_cfg;
-    pf_writer_t writer;
+    pf_writer *writer;
     lf_queue *trace_queue;
     lf_shm_queue *shm_trace_queue;
     uint16_t current_msg_id;
@@ -38,18 +38,15 @@ pid_t get_tid(void)
 }
 
 static int local_init() {
-	int res;
-
 	trace_ctx.trace_queue = lf_queue_init(trace_ctx.trace_cfg.trace_queue_size,
 	                                      trace_ctx.trace_cfg.max_trace_message_size);
 	if (trace_ctx.trace_queue == NULL) {
 		return ENOMEM;
 	}
-	res = pf_writer_start(&trace_ctx.writer, trace_ctx.trace_queue,
-	                      trace_ctx.trace_cfg.file_name_prefix, getpid());
-	if (res) {
+	trace_ctx.writer = pf_writer_start(trace_ctx.trace_queue, trace_ctx.trace_cfg.file_name_prefix, getpid());
+	if (trace_ctx.writer == NULL) {
 		lf_queue_destroy(trace_ctx.trace_queue);
-		return res;
+		return ENOMEM;
 	}
 	return 0;
 }
@@ -152,7 +149,7 @@ int pf_trace_destroy(void)
 		lf_shm_queue_deattach(trace_ctx.daemon_shm_queue);
 		lf_shm_queue_destroy(trace_ctx.shm_trace_queue);
 	} else {
-		pf_writer_stop(&trace_ctx.writer);
+		pf_writer_stop(trace_ctx.writer);
 		lf_queue_destroy(trace_ctx.trace_queue);
 	}
 	for (i = 0; i < PF_MAX_MSG_ID; ++i) {

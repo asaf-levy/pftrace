@@ -2,10 +2,10 @@
 
 #include <lf-queue/lf_queue.h>
 
-typedef struct pf_writer {
-	void *handle;
-} pf_writer_t;
+typedef struct pf_writer pf_writer;
 
-int pf_writer_start(pf_writer_t *writer, lf_queue *queue,
-                    const char *file_name_prefix, int pid);
-int pf_writer_stop(pf_writer_t *writer);
+// Starts a trace writer thread that reads trace messages from the provided queue,
+// and writes them to a binary trace file.
+ pf_writer *pf_writer_start(lf_queue *queue, const char *file_name_prefix, int pid);
+// Stops the provided trace writer thread
+int pf_writer_stop(pf_writer *writer);
