@@ -11,7 +11,7 @@
 typedef struct pf_writer_impl {
     bool stop;
     pthread_t writer_thread;
-    lf_queue_handle_t queue;
+    lf_queue *queue;
     FILE *md_file;
     FILE *trc_file;
 } pf_writer_impl_t;
@@ -140,7 +140,7 @@ static void writer_terminate(pf_writer_impl_t *writer)
 	close_file(writer->trc_file);
 }
 
-int pf_writer_start(pf_writer_t *writer, lf_queue_handle_t queue,
+int pf_writer_start(pf_writer_t *writer, lf_queue *queue,
                     const char *file_name_prefix, int pid)
 {
 	int res;

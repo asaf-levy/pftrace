@@ -19,10 +19,11 @@
 typedef struct pf_trace {
     pf_trace_config_t trace_cfg;
     pf_writer_t writer;
-    lf_queue_handle_t trace_queue;
-    lf_shm_queue_handle_t shm_trace_queue;
+    lf_queue *trace_queue;
+    lf_shm_queue *shm_trace_queue;
     uint16_t current_msg_id;
     uint16_t *type_info[PF_MAX_MSG_ID];
+    lf_shm_queue *daemon_shm_queue;
 } pf_trace_t;
 
 static pf_trace_t trace_ctx;
@@ -37,17 +38,18 @@ pid_t get_tid(void)
 }
 
 static int local_init() {
-	int err = lf_queue_init(&trace_ctx.trace_queue,
-	                        trace_ctx.trace_cfg.trace_queue_size,
-	                        trace_ctx.trace_cfg.max_trace_message_size);
-	if (err) {
-		return err;
+	int res;
+
+	trace_ctx.trace_queue = lf_queue_init(trace_ctx.trace_cfg.trace_queue_size,
+	                                      trace_ctx.trace_cfg.max_trace_message_size);
+	if (trace_ctx.trace_queue == NULL) {
+		return ENOMEM;
 	}
-	err = pf_writer_start(&trace_ctx.writer, trace_ctx.trace_queue,
+	res = pf_writer_start(&trace_ctx.writer, trace_ctx.trace_queue,
 	                      trace_ctx.trace_cfg.file_name_prefix, getpid());
-	if (err) {
+	if (res) {
 		lf_queue_destroy(trace_ctx.trace_queue);
-		return err;
+		return res;
 	}
 	return 0;
 }
@@ -55,53 +57,72 @@ static int local_init() {
 static int send_setup_message(const char *shm_name)
 {
 	lf_element_t element;
-	lf_shm_queue_handle_t shm_queue;
-	lf_queue_handle_t queue;
+	lf_queue *queue;
 	daemon_msg_t *msg;
+	daemon_setup_msg_t *smsg;
 	int res;
 
-	res = lf_shm_queue_attach(&shm_queue, DEAMON_SHM_NAME,
-	                          DEAMON_QUEUE_SIZE, sizeof(daemon_msg_t));
-	if (res != 0) {
-		printf("lf_shm_queue_attach failed err=%d", res);
-		return res;
-	}
-
-	queue = lf_shm_queue_get_underlying_handle(shm_queue);
+	queue = lf_shm_queue_get_underlying_handle(trace_ctx.daemon_shm_queue);
 	res = lf_queue_get(queue, &element);
 	if (res != 0) {
-		lf_shm_queue_destroy(shm_queue);
 		printf("lf_queue_get failed err=%d", res);
 		return res;
 	}
 	msg = element.data;
+	msg->type = DSETUP_MSG_TYPE;
+	smsg = &msg->setup_msg;
 
-	strncpy(msg->file_name_prefix, trace_ctx.trace_cfg.file_name_prefix,
-	        sizeof(msg->file_name_prefix));
-	msg->proc_pid = getpid();
-	strncpy(msg->shm_name, shm_name, sizeof(msg->shm_name));
-	msg->cfg = trace_ctx.trace_cfg;
+	strncpy(smsg->file_name_prefix, trace_ctx.trace_cfg.file_name_prefix,
+	        sizeof(smsg->file_name_prefix));
+	smsg->proc_pid = getpid();
+	strncpy(smsg->shm_name, shm_name, sizeof(smsg->shm_name));
+	smsg->cfg = trace_ctx.trace_cfg;
 
 	lf_queue_enqueue(queue, &element);
-	lf_shm_queue_deattach(shm_queue);
+	return 0;
+}
+
+static int send_teardown_message()
+{
+	lf_element_t element;
+	lf_queue *queue;
+	daemon_msg_t *msg;
+	int res;
+
+	queue = lf_shm_queue_get_underlying_handle(trace_ctx.daemon_shm_queue);
+	res = lf_queue_get(queue, &element);
+	if (res != 0) {
+		printf("lf_queue_get failed err=%d", res);
+		return res;
+	}
+	msg = element.data;
+	msg->type = DTEARDOWN_MSG_TYPE;
+	msg->teardown_msg.proc_pid = getpid();
+
+	lf_queue_enqueue(queue, &element);
 	return 0;
 }
 
 static int daemon_init()
 {
-	int res;
 	char shm_name[PF_MAX_NAME];
 	pid_t pid = getpid();
 
 	snprintf(shm_name, sizeof(shm_name), "pf_trace_mem.%d", pid);
-	res = lf_shm_queue_init(&trace_ctx.shm_trace_queue, shm_name,
-	                        trace_ctx.trace_cfg.trace_queue_size,
-	                        trace_ctx.trace_cfg.max_trace_message_size);
-	if (res != 0) {
-		printf("lf_shm_queue_init failed err=%d", res);
-		return res;
+	trace_ctx.shm_trace_queue = lf_shm_queue_init(shm_name, trace_ctx.trace_cfg.trace_queue_size,
+	                                              trace_ctx.trace_cfg.max_trace_message_size);
+	if (trace_ctx.shm_trace_queue == NULL) {
+		printf("lf_shm_queue_init failed");
+		return ENOMEM;
 	}
 	trace_ctx.trace_queue = lf_shm_queue_get_underlying_handle(trace_ctx.shm_trace_queue);
+
+	trace_ctx.daemon_shm_queue = lf_shm_queue_attach(DEAMON_SHM_NAME, DEAMON_QUEUE_SIZE, sizeof(daemon_msg_t));
+	if (trace_ctx.shm_trace_queue == NULL) {
+		printf("lf_shm_queue_attach failed");
+		return ENOMEM;
+	}
+
 	return send_setup_message(shm_name);
 }
 
@@ -127,7 +148,9 @@ int pf_trace_destroy(void)
 	int i;
 
 	if (trace_ctx.trace_cfg.use_trace_daemon) {
-//		lf_shm_queue_destroy(trace_ctx.shm_trace_queue);
+		send_teardown_message();
+		lf_shm_queue_deattach(trace_ctx.daemon_shm_queue);
+		lf_shm_queue_destroy(trace_ctx.shm_trace_queue);
 	} else {
 		pf_writer_stop(&trace_ctx.writer);
 		lf_queue_destroy(trace_ctx.trace_queue);
@@ -224,7 +247,6 @@ int pf_trace_fmt(uint16_t msg_id, const char *file, int line,
 
 	res = store_fmt_info(msg_id, fmt);
 	if (res != 0) {
-		// TODO test put after get
 		lf_queue_put(trace_ctx.trace_queue, &lfe);
 		return res;
 	}

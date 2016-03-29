@@ -1,5 +1,4 @@
-#ifndef __PF_TRACE_H_INCLUDED__
-#define __PF_TRACE_H_INCLUDED__
+#pragma once
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -62,6 +61,4 @@ __attribute__((format(printf, 2, 3)));
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

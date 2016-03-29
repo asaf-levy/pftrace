@@ -1,5 +1,4 @@
-#ifndef __PF_INTERNAL_H_INCLUDED__
-#define __PF_INTERNAL_H_INCLUDED__
+#pragma once
 
 #include <stdint.h>
 #include "pf_trace.h"
@@ -41,15 +40,28 @@ typedef struct queue_msg {
     // followed by the message buffer
 } queue_msg_t;
 
-typedef struct daemon_msg {
+
+typedef struct daemon_setup_msg {
     int proc_pid;
     char file_name_prefix[PF_MAX_NAME];
     char shm_name[PF_MAX_NAME];
     pf_trace_config_t cfg;
+} daemon_setup_msg_t;
+
+typedef struct daemon_teardown_msg {
+    int proc_pid;
+} daemon_teardown_msg_t;
+
+#define DSETUP_MSG_TYPE 1
+#define DTEARDOWN_MSG_TYPE 2
+typedef struct daemon_msg {
+    int type;
+    union {
+        daemon_setup_msg_t setup_msg;
+        daemon_teardown_msg_t teardown_msg;
+    };
 } daemon_msg_t;
 
 static inline char *qmsg_buffer(queue_msg_t *queue_msg) {
 	return (char*)queue_msg + sizeof(*queue_msg);
 }
-
-#endif

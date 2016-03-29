@@ -28,7 +28,7 @@ int main(void)
 		.max_trace_message_size = 64,
 		.trace_queue_size = 500000,
 		.level = PF_TRC_DEBUG,
-		.use_trace_daemon = false,
+		.use_trace_daemon = true,
 		.file_name_prefix = "./pf_trace_test",
 	};
 
