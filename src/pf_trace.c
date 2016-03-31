@@ -53,21 +53,14 @@ static int local_init() {
 
 static int send_setup_message(const char *shm_name)
 {
-	lf_element_t element;
-	lf_queue *queue;
-	daemon_msg_t *msg;
-	daemon_setup_msg_t *smsg;
-	int res;
-
-	queue = lf_shm_queue_get_underlying_handle(trace_ctx.daemon_shm_queue);
-	res = lf_queue_get(queue, &element);
-	if (res != 0) {
-		printf("lf_queue_get failed err=%d", res);
-		return res;
+	lf_queue *queue = lf_shm_queue_get_underlying_handle(trace_ctx.daemon_shm_queue);
+	daemon_msg_t *msg = lf_queue_get(queue);
+	if (msg == NULL) {
+		printf("lf_queue_get failed");
+		return ENOMEM;
 	}
-	msg = element.data;
 	msg->type = DSETUP_MSG_TYPE;
-	smsg = &msg->setup_msg;
+	daemon_setup_msg_t *smsg = &msg->setup_msg;
 
 	strncpy(smsg->file_name_prefix, trace_ctx.trace_cfg.file_name_prefix,
 	        sizeof(smsg->file_name_prefix));
@@ -75,28 +68,23 @@ static int send_setup_message(const char *shm_name)
 	strncpy(smsg->shm_name, shm_name, sizeof(smsg->shm_name));
 	smsg->cfg = trace_ctx.trace_cfg;
 
-	lf_queue_enqueue(queue, &element);
+	lf_queue_enqueue(queue, msg);
 	return 0;
 }
 
 static int send_teardown_message()
 {
-	lf_element_t element;
-	lf_queue *queue;
-	daemon_msg_t *msg;
-	int res;
-
-	queue = lf_shm_queue_get_underlying_handle(trace_ctx.daemon_shm_queue);
-	res = lf_queue_get(queue, &element);
-	if (res != 0) {
-		printf("lf_queue_get failed err=%d", res);
-		return res;
+	lf_queue *queue = lf_shm_queue_get_underlying_handle(trace_ctx.daemon_shm_queue);
+	daemon_msg_t *msg = lf_queue_get(queue);
+	if (msg == NULL) {
+		printf("lf_queue_get failed");
+		return ENOMEM;
 	}
-	msg = element.data;
+
 	msg->type = DTEARDOWN_MSG_TYPE;
 	msg->teardown_msg.proc_pid = getpid();
 
-	lf_queue_enqueue(queue, &element);
+	lf_queue_enqueue(queue, msg);
 	return 0;
 }
 
@@ -115,7 +103,7 @@ static int daemon_init()
 	trace_ctx.trace_queue = lf_shm_queue_get_underlying_handle(trace_ctx.shm_trace_queue);
 
 	trace_ctx.daemon_shm_queue = lf_shm_queue_attach(DEAMON_SHM_NAME, DEAMON_QUEUE_SIZE, sizeof(daemon_msg_t));
-	if (trace_ctx.shm_trace_queue == NULL) {
+	if (trace_ctx.daemon_shm_queue == NULL) {
 		printf("lf_shm_queue_attach failed");
 		return ENOMEM;
 	}
@@ -227,34 +215,31 @@ int pf_trace_fmt(uint16_t msg_id, const char *file, int line,
                  const char *func, pf_trc_level_t level,
                  const char *fmt)
 {
-	queue_msg_t *q_msg;
 	fmt_msg_t *fmt_msg;
-	lf_element_t lfe;
 	int res;
 
 	if (trace_ctx.type_info[msg_id] != NULL) {
 		// format for this message was already processed
 		return EALREADY;
 	}
-	res = lf_queue_get(trace_ctx.trace_queue, &lfe);
-	if (res != 0) {
+	queue_msg_t *q_msg = lf_queue_get(trace_ctx.trace_queue);
+	if (q_msg == NULL) {
 		// no place in the trace queue now
 		return ENOMEM;
 	}
 
 	res = store_fmt_info(msg_id, fmt);
 	if (res != 0) {
-		lf_queue_put(trace_ctx.trace_queue, &lfe);
+		lf_queue_put(trace_ctx.trace_queue, q_msg);
 		return res;
 	}
-	q_msg = lfe.data;
 	q_msg->type = FMT_MSG_TYPE;
 	fmt_msg = &q_msg->fmt_msg;
 	fmt_msg->msg_id = msg_id;
 	// TODO handle truncation
 	fmt_msg->fmt_len = build_fmt(qmsg_buffer(q_msg), msg_id, file, line,
 	                             func, level, fmt);
-	lf_queue_enqueue(trace_ctx.trace_queue, &lfe);
+	lf_queue_enqueue(trace_ctx.trace_queue, q_msg);
 	return 0;
 }
 
@@ -341,31 +326,27 @@ static void store_args(uint16_t msg_id, va_list vl, trc_msg_t *trc_msg, char *ms
 
 void pf_trace(uint16_t msg_id, const char *fmt, ...)
 {
-	int res;
 	va_list vl;
-	lf_element_t lfe;
-	queue_msg_t *q_msg;
 	trc_msg_t *trc_msg;
 	struct timespec now;
 
 	if (trace_ctx.type_info[msg_id] == NULL) {
 		return;
 	}
-	res = lf_queue_get(trace_ctx.trace_queue, &lfe);
-	if (res != 0) {
+	queue_msg_t *q_msg = lf_queue_get(trace_ctx.trace_queue);
+	if (q_msg == NULL) {
 		// no place in the trace queue now
 		return;
 	}
 	clock_gettime(CLOCK_REALTIME, &now);
 
 	va_start(vl, fmt);
-	q_msg = lfe.data;
 	q_msg->type = TRC_MSG_TYPE;
 	trc_msg = &q_msg->trc_msg;
 	trc_msg->msg_id = msg_id;
 	trc_msg->tid = (uint16_t)get_tid();
 	trc_msg->timestamp_nsec = (uint64_t)(now.tv_nsec + (now.tv_sec * NSEC_IN_SEC));
 	store_args(msg_id, vl, trc_msg, qmsg_buffer(q_msg));
-	lf_queue_enqueue(trace_ctx.trace_queue, &lfe);
+	lf_queue_enqueue(trace_ctx.trace_queue, q_msg);
 	va_end(vl);
 }

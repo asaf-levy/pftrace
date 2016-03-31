@@ -157,16 +157,12 @@ static void monitor_procs()
 
 static void handle_msgs()
 {
-	lf_element_t element;
-	lf_queue *queue;
-	int res;
-
-	queue = lf_shm_queue_get_underlying_handle(dctx.daemon_shm_queue);
-
+	lf_queue *queue = lf_shm_queue_get_underlying_handle(dctx.daemon_shm_queue);
 	while (!dctx.stop) {
-		res = lf_queue_dequeue(queue, &element);
-		if (res == 0) {
-			handle_daemon_msg(element.data);
+		daemon_msg_t *msg = lf_queue_dequeue(queue);
+		if (msg != NULL) {
+			handle_daemon_msg(msg);
+			lf_queue_put(queue, msg);
 		}
 		monitor_procs();
 		sleep(1);

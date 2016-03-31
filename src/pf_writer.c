@@ -52,9 +52,8 @@ static void write_trc_msg(pf_writer *writer, trc_msg_t *msg, char *msg_buffer)
 	}
 }
 
-static void handle_queue_msg(pf_writer *writer, lf_element_t *lfe)
+static void handle_queue_msg(pf_writer *writer, queue_msg_t *msg)
 {
-	queue_msg_t *msg = lfe->data;
 	switch (msg->type) {
 	case FMT_MSG_TYPE:
 		write_fmt_msg(writer, &msg->fmt_msg, qmsg_buffer(msg));
@@ -70,13 +69,13 @@ static void handle_queue_msg(pf_writer *writer, lf_element_t *lfe)
 static void *writer_func(void *arg)
 {
 	pf_writer *writer = arg;
-	lf_element_t lfe;
 	bool flush = false;
 
 	while (!writer->stop) {
-		if (lf_queue_dequeue(writer->queue, &lfe) == 0) {
-			handle_queue_msg(writer, &lfe);
-			lf_queue_put(writer->queue, &lfe);
+		queue_msg_t *msg = lf_queue_dequeue(writer->queue);
+		if (msg != NULL) {
+			handle_queue_msg(writer, msg);
+			lf_queue_put(writer->queue, msg);
 			flush = true;
 		} else {
 			if (flush) {
@@ -93,10 +92,11 @@ static void *writer_func(void *arg)
 
 static void flush_queue(pf_writer *writer)
 {
-	lf_element_t lfe;
-	while (lf_queue_dequeue(writer->queue, &lfe) == 0) {
-		handle_queue_msg(writer, &lfe);
-		lf_queue_put(writer->queue, &lfe);
+	queue_msg_t *msg = lf_queue_dequeue(writer->queue);
+	while (msg != NULL) {
+		handle_queue_msg(writer, msg);
+		lf_queue_put(writer->queue, msg);
+		msg = lf_queue_dequeue(writer->queue);
 	}
 }
 
