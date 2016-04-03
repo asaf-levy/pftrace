@@ -271,32 +271,32 @@ static void store_args(uint16_t msg_id, va_list vl, trc_msg_t *trc_msg, char *ms
 		switch (types[i]) {
 		case PA_INT:
 			val_int = va_arg(vl, int);
-			store_arg((void *) &val_int, sizeof(val_int), trc_msg, msg_buffer);
+			store_arg((void *)&val_int, sizeof(val_int), trc_msg, msg_buffer);
 			break;
 		case PA_INT | PA_FLAG_LONG:
 			val_l_int = va_arg(vl, long int);
-			store_arg((void *) &val_l_int, sizeof(val_l_int), trc_msg, msg_buffer);
+			store_arg((void *)&val_l_int, sizeof(val_l_int), trc_msg, msg_buffer);
 			break;
 		case PA_INT | PA_FLAG_LONG_LONG:
 			val_ll_int = va_arg(vl, long long int);
-			store_arg((void *) &val_ll_int, sizeof(val_ll_int), trc_msg, msg_buffer);
+			store_arg((void *)&val_ll_int, sizeof(val_ll_int), trc_msg, msg_buffer);
 			break;
 		case PA_INT | PA_FLAG_SHORT:
 			val_int = va_arg(vl, int);
 			val_s_int = (short int)val_int;
-			store_arg((void *) &val_s_int, sizeof(val_s_int), trc_msg, msg_buffer);
+			store_arg((void *)&val_s_int, sizeof(val_s_int), trc_msg, msg_buffer);
 			break;
 		case PA_CHAR:
 			val_int = va_arg(vl, int);
 			val_chr = (char)val_int;
-			store_arg((void *) &val_chr, sizeof(val_chr), trc_msg, msg_buffer);
+			store_arg((void *)&val_chr, sizeof(val_chr), trc_msg, msg_buffer);
 			break;
 		case PA_STRING:
 			val_str = va_arg(vl, char *);
 			if (!val_str) {
 				val_str = (char *)"<NULL>";
 			}
-			store_arg((void *)val_str, strlen(val_str), trc_msg, msg_buffer);
+			store_arg((void *)val_str, strlen(val_str) + 1, trc_msg, msg_buffer);
 			break;
 		case PA_POINTER:
 			val_ptr = va_arg(vl, void *);
@@ -305,15 +305,15 @@ static void store_args(uint16_t msg_id, va_list vl, trc_msg_t *trc_msg, char *ms
 		case PA_FLOAT:
 			val_dbl = va_arg(vl, double);
 			val_flt = (float) val_dbl;
-			store_arg((void *) &val_flt, sizeof(val_flt), trc_msg, msg_buffer);
+			store_arg((void *)&val_flt, sizeof(val_flt), trc_msg, msg_buffer);
 			break;
 		case PA_DOUBLE:
 			val_dbl = va_arg(vl, double);
-			store_arg((void *) &val_dbl, sizeof(val_dbl), trc_msg, msg_buffer);
+			store_arg((void *)&val_dbl, sizeof(val_dbl), trc_msg, msg_buffer);
 			break;
 		case PA_DOUBLE | PA_FLAG_LONG_DOUBLE:
 			val_l_dbl = va_arg(vl, long double);
-			store_arg((void *) &val_l_dbl, sizeof(val_l_dbl), trc_msg, msg_buffer);
+			store_arg((void *)&val_l_dbl, sizeof(val_l_dbl), trc_msg, msg_buffer);
 			break;
 		case PA_LAST:
 			break;

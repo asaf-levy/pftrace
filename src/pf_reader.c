@@ -151,11 +151,11 @@ static void parse_trc_msg(char *p_out, char *p_fmt, char *buf, uint16_t *type_in
 	char *p_buf = buf;
 	int spres;
 
-	#define PARSE_ARG(T, TSTR) \
+	#define PARSE_ARG(T, FMT) \
                 if (((size_t)(p_buf - buf) + sizeof(T)) > MAX_OUTPUT_SIZE) { \
                         break; \
                 } \
-                p_out += sprintf(p_out, TSTR, *((T*)p_buf)); \
+                p_out += sprintf(p_out, FMT, *((T*)p_buf)); \
                 p_buf += sizeof(T);
 
 	while (*p_fmt) {
@@ -167,36 +167,40 @@ static void parse_trc_msg(char *p_out, char *p_fmt, char *buf, uint16_t *type_in
 
 			switch (type_info[i]) {
 			case PA_INT:
-			PARSE_ARG(int, p_fmt);
+				PARSE_ARG(int, p_fmt);
 				break;
 			case PA_INT | PA_FLAG_LONG:
-			PARSE_ARG(long, p_fmt);
+				PARSE_ARG(long, p_fmt);
 				break;
 			case PA_INT | PA_FLAG_LONG_LONG:
-			PARSE_ARG(long long, p_fmt);
+				PARSE_ARG(long long, p_fmt);
 				break;
 			case PA_INT | PA_FLAG_SHORT:
-			PARSE_ARG(short, p_fmt);
+				PARSE_ARG(short, p_fmt);
 				break;
 			case PA_CHAR:
-			PARSE_ARG(char, p_fmt);
+				PARSE_ARG(char, p_fmt);
 				break;
 			case PA_STRING:
 				spres = sprintf(p_out, p_fmt, p_buf);
 				p_out += spres;
-				p_buf += spres + 1;
+				// the sprintf res also includes chars that
+				// are a part of the format string so the size
+				// of the string in the buffer must be counted
+				// separately
+				p_buf += strlen(p_buf) + 1;
 				break;
 			case PA_POINTER:
-			PARSE_ARG(void*, p_fmt);
+				PARSE_ARG(void*, p_fmt);
 				break;
 			case PA_FLOAT:
-			PARSE_ARG(float, p_fmt);
+				PARSE_ARG(float, p_fmt);
 				break;
 			case PA_DOUBLE:
-			PARSE_ARG(double, p_fmt);
+				PARSE_ARG(double, p_fmt);
 				break;
 			case PA_DOUBLE | PA_FLAG_LONG_DOUBLE:
-			PARSE_ARG(long double, p_fmt);
+				PARSE_ARG(long double, p_fmt);
 				break;
 			case PA_LAST:
 				// TODO handle truncation

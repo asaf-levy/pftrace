@@ -13,7 +13,7 @@ static void trc_func()
 	struct timespec end;
 
 	clock_gettime(CLOCK_REALTIME, &start);
-	for (i = 0; i < 1000000; i++) {
+	for (i = 0; i < 100000; i++) {
 		trc_ntc("i=%d", i);
 	}
 	clock_gettime(CLOCK_REALTIME, &end);
@@ -21,26 +21,47 @@ static void trc_func()
 	printf("msec=%lu\n", (((end.tv_sec - start.tv_sec) * 1000000000) + end.tv_nsec - start.tv_nsec) / 1000000);
 }
 
+#define TRACE_EXPECTED(FMT, ARGS...) \
+	do { \
+		char expected[1024]; \
+		snprintf(expected, sizeof(expected), FMT, ##ARGS); \
+		printf("expected [%s] actual ["FMT"]\n", expected, ##ARGS); \
+		trc_dbg("expected [%s] actual ["FMT"]", expected, ##ARGS); \
+	} while (0);
+
+static void expected_test()
+{
+	int i = 8;
+	char *str = "str";
+
+	TRACE_EXPECTED("hello");
+	TRACE_EXPECTED("hello %d %lu %0.2f", 1, 8LU, 1.513123);
+	TRACE_EXPECTED("hello %c %s %c", '1', "b", '2');
+	TRACE_EXPECTED("hello %d %s %lu", 1, "baba", 123412348LU);
+	TRACE_EXPECTED("hello %c %s %c %d %s %llu %x", '1', "b", '2', 87, "wowow", 978687658LLU, -87);
+	TRACE_EXPECTED("hello %d %%%s1232131 %%%lu!@#$%%", 1, "baba", 123412348LU);
+	TRACE_EXPECTED("hello %d %p %d %s", i, &i, i * 2, "iii");
+	TRACE_EXPECTED("hello %d %s %s %s %p %lu", 1, str, str, str, str, 123412348LU);
+}
+
 int main(void)
 {
 	int res;
 	pf_trace_config_t trace_cfg = {
-		.max_trace_message_size = 64,
-		.trace_queue_size = 500000,
+		.max_trace_message_size = 512,
+		.trace_queue_size = 100000,
 		.level = PF_TRC_DEBUG,
 		.use_trace_daemon = false,
 		.file_name_prefix = "./pf_trace_test",
 	};
 
 	res = pf_trace_init(&trace_cfg);
-	sleep(1);
 	assert(res == 0);
-	trc_dbg("hello");
-	trc_dbg("hello %d %lu %0.2f", 1, 8LU, 1.513123);
-	trc_dbg("hello %s", "bla");
+
+	expected_test();
+	sleep(1);
 	trc_func();
 
-	sleep(1);
 	pf_trace_destroy();
 	return 0;
 }
