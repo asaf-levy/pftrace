@@ -5,17 +5,18 @@
 
 #define PF_MAX_MSG_ID 65535
 
-// TODO write this to the trace files
 typedef struct version_msg {
     uint64_t magic;
     uint64_t version;
 } version_msg_t;
 
-#define MD_FILE_MAGIC   0x0123abcd
-#define TRC_FILE_MAGIC  0x0123abce
-#define NSEC_IN_SEC     1000000000
-#define DEAMON_QUEUE_SIZE 8
-#define DEAMON_SHM_NAME  "/pf_trc_daemon"
+#define MD_FILE_MAGIC           0x0123abcd
+#define MD_FILE_VERSION         1
+#define TRC_FILE_MAGIC          0x0123abce
+#define TRC_FILE_VERSION        1
+#define DEAMON_QUEUE_SIZE       8
+#define DEAMON_SHM_NAME         "/pf_trc_daemon"
+#define NSEC_IN_SEC             1000000000
 
 typedef struct __attribute__((packed)) fmt_msg {
     uint16_t msg_id;

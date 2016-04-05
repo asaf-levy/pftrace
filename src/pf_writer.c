@@ -100,8 +100,24 @@ static void flush_queue(pf_writer *writer)
 	}
 }
 
+static int write_version(FILE *fd, uint64_t magic, uint64_t version)
+{
+	version_msg_t msg = {
+		.magic = magic,
+		.version = version,
+	};
+
+	size_t written = fwrite_unlocked(&msg, 1, sizeof(msg), fd);
+	if (written != sizeof(msg)) {
+		printf("write failed written=%lu err=%d\n", written, errno);
+		return - 1;
+	}
+	return 0;
+}
+
 static int writer_init(pf_writer *writer, const char *file_name_prefix, int pid)
 {
+	int res;
 	char file_path[PATH_MAX];
 	char link_path[PATH_MAX];
 
@@ -111,12 +127,26 @@ static int writer_init(pf_writer *writer, const char *file_name_prefix, int pid)
 		printf("failed to open %s err=%d\n", file_path, errno);
 		return errno;
 	}
+	res = write_version(writer->md_file, MD_FILE_MAGIC, MD_FILE_VERSION);
+	if (res != 0) {
+		printf("md file write_version failed\n");
+		fclose(writer->md_file);
+		return res;
+	}
+
 	snprintf(file_path, sizeof(file_path), "%s.%d.trc", file_name_prefix, pid);
 	writer->trc_file = fopen(file_path, "w");
 	if (writer->trc_file == NULL) {
 		fclose(writer->md_file);
 		printf("failed to open %s err=%d\n", file_path, errno);
 		return errno;
+	}
+	res = write_version(writer->trc_file, TRC_FILE_MAGIC, TRC_FILE_VERSION);
+	if (res != 0) {
+		printf("trc file write_version failed\n");
+		fclose(writer->md_file);
+		fclose(writer->trc_file);
+		return res;
 	}
 	snprintf(link_path, sizeof(link_path), "%s.latest.trc", file_name_prefix);
 	unlink(link_path);
@@ -160,6 +190,7 @@ pf_writer *pf_writer_start(lf_queue *queue, const char *file_name_prefix, int pi
 
 	res = pthread_create(&writer->writer_thread, NULL, writer_func, writer);
 	if (res != 0) {
+		writer_terminate(writer);
 		free(writer);
 		return NULL;
 	}

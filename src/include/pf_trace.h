@@ -52,12 +52,12 @@ __attribute__((format(printf, 2, 3)));
 		pf_trace(msg_id, FMT, ##ARGS); \
 	} while (0);
 
-#define trc_dbg(FMT, ARGS...) TRACE(PF_TRC_DEBUG, FMT, ##ARGS)
-#define trc_inf(FMT, ARGS...) TRACE(PF_TRC_INFO, FMT, ##ARGS)
-#define trc_ntc(FMT, ARGS...) TRACE(PF_TRC_NOTICE, FMT, ##ARGS)
-#define trc_wrn(FMT, ARGS...) TRACE(PF_TRC_WARNING, FMT, ##ARGS)
-#define trc_err(FMT, ARGS...) TRACE(PF_TRC_ERROR, FMT, ##ARGS)
-#define trc_ftl(FMT, ARGS...) TRACE(PF_TRC_FATAL, FMT, ##ARGS)
+#define trcdbg(FMT, ARGS...) TRACE(PF_TRC_DEBUG, FMT, ##ARGS)
+#define trcinf(FMT, ARGS...) TRACE(PF_TRC_INFO, FMT, ##ARGS)
+#define trcntc(FMT, ARGS...) TRACE(PF_TRC_NOTICE, FMT, ##ARGS)
+#define trcwrn(FMT, ARGS...) TRACE(PF_TRC_WARNING, FMT, ##ARGS)
+#define trcerr(FMT, ARGS...) TRACE(PF_TRC_ERROR, FMT, ##ARGS)
+#define trcftl(FMT, ARGS...) TRACE(PF_TRC_FATAL, FMT, ##ARGS)
 
 #ifdef __cplusplus
 }

@@ -65,6 +65,36 @@ static int init(const char *trc_file_name)
 	return 0;
 }
 
+static int verify_version(FILE *fd, uint64_t magic, uint64_t version)
+{
+	version_msg_t msg;
+	size_t bytes_read = fread_unlocked(&msg, 1, sizeof(msg), fd);
+	if (bytes_read != sizeof(msg)) {
+		printf("read failed, bytes_read=%lu\n", bytes_read);
+		return -1;
+	}
+	if (magic != msg.magic) {
+		printf("invalid magic expected=0x%lx found=0x%lu\n", magic, msg.magic);
+		return -1;
+	}
+	if (version != msg.version) {
+		printf("invalid version expected=0x%lx found=0x%lu\n", version, msg.version);
+		return -1;
+	}
+	return 0;
+}
+
+static int verify_versions()
+{
+	if (verify_version(rctx.md_file, MD_FILE_MAGIC, MD_FILE_VERSION) != 0) {
+		return -1;
+	}
+	if (verify_version(rctx.trc_file, TRC_FILE_MAGIC, TRC_FILE_VERSION) != 0) {
+		return -1;
+	}
+	return 0;
+}
+
 static void terminate(void)
 {
 	int i;
@@ -308,7 +338,9 @@ int main(int argc, char **argv)
 	if (init(argv[1]) != 0) {
 		return 1;
 	}
-	print_traces();
+	if (verify_versions() == 0) {
+		print_traces();
+	};
 	terminate();
 	return 0;
 }
