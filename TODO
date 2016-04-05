@@ -1,0 +1,7 @@
+* auto verify the trace in test
+* struct tracing
+* represent time as delta in order to save space
+* store latest debug traces in memory, dump on error
+* message loss indication
+* trucation indication
+* avoid truncation by concatenating message buffers
