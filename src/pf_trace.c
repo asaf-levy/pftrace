@@ -111,7 +111,7 @@ static int daemon_init()
 	return send_setup_message(shm_name);
 }
 
-int pf_trace_init(pf_trace_config_t *trace_cfg)
+int pf_trace_init(const pf_trace_config_t *trace_cfg)
 {
 	int i;
 

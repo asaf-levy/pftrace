@@ -25,7 +25,15 @@ typedef struct pf_trace_config {
     char file_name_prefix[PF_MAX_NAME];
 } pf_trace_config_t;
 
-int pf_trace_init(pf_trace_config_t *trace_cfg);
+static const pf_trace_config_t PF_TRC_DEFAULT_INIT = {
+	.max_trace_message_size = 512,
+	.trace_queue_size = 10000,
+	.level = PF_TRC_NOTICE,
+	.use_trace_daemon = false,
+	.file_name_prefix = "pf_trace",
+};
+
+int pf_trace_init(const pf_trace_config_t *trace_cfg);
 int pf_trace_destroy(void);
 
 void pf_trace_set_level(pf_trc_level_t level);

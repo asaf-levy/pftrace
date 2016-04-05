@@ -5,3 +5,4 @@
 * message loss indication
 * trucation indication
 * avoid truncation by concatenating message buffers
+* support external file rotation
